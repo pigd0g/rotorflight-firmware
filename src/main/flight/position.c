@@ -101,10 +101,6 @@ static float calculateVario(float altitude)
 
 void positionUpdate(void)
 {
-#ifdef USE_POSITION_HOLD
-    positionEstimatorUpdate(0);
-#endif
-
 #ifdef USE_BARO
     if (alt.source == ALT_SOURCE_DEFAULT || alt.source == ALT_SOURCE_BARO_ONLY) {
         if (sensors(SENSOR_BARO) && baroIsReady()) {

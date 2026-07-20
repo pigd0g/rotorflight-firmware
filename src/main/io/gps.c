@@ -1512,8 +1512,9 @@ static bool UBLOX_parse_gps(void)
         break;
     case MSG_VELNED:
         *gpsPacketLogChar = LOG_UBLOX_VELNED;
-        gpsSol.velN = _buffer.velned.ned_north / 100;   // cm/s
-        gpsSol.velE = _buffer.velned.ned_east / 100;     // cm/s
+        // UBX-NAV-VELNED fields are already in cm/s per u-blox spec; no scaling needed.
+        gpsSol.velN = (int16_t)constrain(_buffer.velned.ned_north, INT16_MIN, INT16_MAX);
+        gpsSol.velE = (int16_t)constrain(_buffer.velned.ned_east, INT16_MIN, INT16_MAX);
         gpsSol.speed3d = _buffer.velned.speed_3d;       // cm/s
         gpsSol.groundSpeed = _buffer.velned.speed_2d;    // cm/s
         gpsSol.groundCourse = (uint16_t) (_buffer.velned.heading_2d / 10000);     // Heading 2D deg * 100000 rescaled to deg * 10
@@ -1529,8 +1530,8 @@ static bool UBLOX_parse_gps(void)
         _new_position = true;
         gpsSol.numSat = _buffer.pvt.numSV;
         gpsSol.hdop = _buffer.pvt.pDOP;
-        gpsSol.velE = _buffer.pvt.velE / 10;              // mm/s -> cm/s
-        gpsSol.velN = _buffer.pvt.velN / 10;              // mm/s -> cm/s
+        gpsSol.velE = (int16_t)constrain(_buffer.pvt.velE / 10, INT16_MIN, INT16_MAX);   // mm/s -> cm/s
+        gpsSol.velN = (int16_t)constrain(_buffer.pvt.velN / 10, INT16_MIN, INT16_MAX);   // mm/s -> cm/s
         gpsSol.speed3d = (uint16_t) sqrtf(sqf(_buffer.pvt.gSpeed / 10.0f) + sqf(_buffer.pvt.velD / 10.0f));
         gpsSol.groundSpeed = _buffer.pvt.gSpeed / 10;    // cm/s
         gpsSol.groundCourse = (uint16_t) (_buffer.pvt.headMot / 10000);     // Heading 2D deg * 100000 rescaled to deg * 10
@@ -1864,8 +1865,8 @@ void GPS_distance2d(int32_t *currentLat, int32_t *currentLon, int32_t *originLat
     const float dLat = (float)(*currentLat - *originLat);
     const float dLon = (float)(*currentLon - *originLon) * GPS_scaleLonDown;
 
-    // 1e-7 degrees * 1.113195f * 100 * 1000 = cm per 1e-7 degree
-    const float scale = DISTANCE_BETWEEN_TWO_LONGITUDE_POINTS_AT_EQUATOR_IN_HUNDREDS_OF_KILOMETERS * 100.0f;
+    // 1e-7 degrees * 1.113195f = cm per 1e-7 degree. Matches GPS_distance_cm_bearing.
+    const float scale = DISTANCE_BETWEEN_TWO_LONGITUDE_POINTS_AT_EQUATOR_IN_HUNDREDS_OF_KILOMETERS;
 
     // East  = dLon, North = dLat (ENU convention)
     *offsetEast  = dLon * scale;

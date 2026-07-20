@@ -37,6 +37,7 @@
 
 #ifdef USE_ALTITUDE_HOLD
 #include "flight/autopilot.h"
+#include "flight/pos_hold.h"
 #endif
 
 #include "fc/runtime_config.h"
@@ -291,8 +292,11 @@ void setpointUpdate(void)
     }
 
     // Altitude-hold overrides collective pitch setpoint; governor still drives throttle.
+    // When alt-hold sensors have failed, do not apply the autopilot collective —
+    // pos_hold.c freezes it at hover, but as a second layer of defense we leave
+    // the pilot's collective stick in command so the user retains control.
 #ifdef USE_ALTITUDE_HOLD
-    if (FLIGHT_MODE(ALTHOLD_MODE)) {
+    if (FLIGHT_MODE(ALTHOLD_MODE) && !altHoldFailure()) {
         SP[FD_COLL] = getAutopilotCollective();
     }
 #endif

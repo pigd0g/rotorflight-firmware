@@ -43,6 +43,8 @@
 #include "flight/pos_hold.h"
 #include "flight/autopilot.h"
 
+#include "io/gps.h"
+
 #include "pg/pos_hold.h"
 
 #include "rx/rx.h"
@@ -52,11 +54,25 @@
 
 float posHoldAngle[ANGLE_INDEX_COUNT] = { 0.0f, 0.0f };
 
+// Must match imu.c:87 — minimum ground speed (cm/s) for GPS course-over-ground
+// to be considered a usable heading source. Kept here as a local constant so
+// pos_hold.c is self-contained; if imu.c ever changes its threshold, update
+// this to match.
+#define POSHOLD_GPS_COG_MIN_GROUNDSPEED 500
+#define POSHOLD_GPS_MIN_SATS_FOR_COG    5
+
 typedef struct posHoldState_s {
     bool isEnabled;
     bool isControlOk;
     bool areSensorsOk;
     float deadband;
+    // Latched: becomes true the first time GPS COG becomes usable (mag healthy
+    // OR groundSpeed >= POSHOLD_GPS_COG_MIN_GROUNDSPEED with a fix and enough
+    // sats). Stays true until both mag and GPS fix are lost entirely. Prevents
+    // PH from disengaging moment-to-moment when ground speed dips below the
+    // COG threshold (e.g. wind gusts), which would otherwise toggle PH off
+    // and on in flight.
+    bool gpsHeadingEverValid;
 } posHoldState_t;
 
 static posHoldState_t posHold;
@@ -64,6 +80,7 @@ static posHoldState_t posHold;
 void INIT_CODE posHoldInit(void)
 {
     posHold.deadband = posHoldConfig()->deadband * 0.01f;
+    posHold.gpsHeadingEverValid = false;
     autopilotInit();
 }
 
@@ -94,7 +111,27 @@ static bool posHoldSensorsOk(void)
     }
 
     if (posHoldConfig()->headingRequired && positionEstimatorIsHeadingRequired()) {
-        return sensors(SENSOR_MAG) || canUseGPSHeading;
+        // GPS gives absolute ENU measurements; a bad yaw in the body->EF
+        // rotation will mis-rotate the correction and cause a flyaway. We
+        // therefore require either a healthy mag or a GPS course-over-ground
+        // that imu.c considers usable (STATE(GPS_FIX), >=5 sats, and
+        // groundSpeed >= GPS_COG_MIN_GROUNDSPEED).
+        const bool magOk = sensors(SENSOR_MAG);
+        const bool gpsCogNowOk =
+            sensors(SENSOR_GPS) && STATE(GPS_FIX) &&
+            gpsSol.numSat >= POSHOLD_GPS_MIN_SATS_FOR_COG &&
+            gpsSol.groundSpeed >= POSHOLD_GPS_COG_MIN_GROUNDSPEED;
+
+        // Latch: once COG (or mag) has ever been usable, stay valid until
+        // both mag and GPS fix are lost entirely. Prevents PH from toggling
+        // off when groundSpeed dips below the COG threshold momentarily.
+        if (magOk || gpsCogNowOk) {
+            posHold.gpsHeadingEverValid = true;
+        } else if (!sensors(SENSOR_GPS) || !STATE(GPS_FIX)) {
+            // Total GPS loss: drop the latch so we re-validate when GPS returns.
+            posHold.gpsHeadingEverValid = false;
+        }
+        return posHold.gpsHeadingEverValid;
     }
 
     return true;
@@ -115,11 +152,25 @@ static bool altHoldSensorsOk(void)
 
 void updatePosHold(timeUs_t currentTimeUs)
 {
-    UNUSED(currentTimeUs);
+    // Run the position estimator at the start of this task so the controller
+    // and the estimator share a single task slot and cannot race each other
+    // (previously the estimator ran in TASK_ALTITUDE and the controller in
+    // TASK_POSHOLD, with no synchronization between them — see C5 in
+    // code-review.md). Only run when at least one of PH/ALTHOLD is active to
+    // save CPU when neither is in use.
+    const bool anyAutopilotMode = FLIGHT_MODE(POS_HOLD_MODE) || FLIGHT_MODE(ALTHOLD_MODE);
+    if (anyAutopilotMode) {
+        positionEstimatorUpdate(currentTimeUs);
+    }
 
     if (FLIGHT_MODE(POS_HOLD_MODE)) {
         if (!posHold.isEnabled) {
             autopilotResetPositionControl();
+            // Reset the heading-valid latch on (re)engagement so we require
+            // fresh confirmation that the current yaw is trustworthy before
+            // letting PH command angles. The craft may have been moved or the
+            // GPS may have dropped between flights.
+            posHold.gpsHeadingEverValid = false;
             posHold.isControlOk = true;
             posHold.isEnabled = true;
         }
@@ -155,6 +206,12 @@ void updatePosHold(timeUs_t currentTimeUs)
     if (FLIGHT_MODE(ALTHOLD_MODE)) {
         if (altHoldSensorsOk()) {
             autopilotAltitudeControl();
+        } else {
+            // Sensors lost mid-hold: freeze collective at the captured hover
+            // trim instead of leaving the last (possibly large) PID output
+            // applied as the collective setpoint. Prevents uncommanded
+            // climb/descent while the OSD "ALTHOLD FAIL" warning is shown.
+            autopilotFreezeCollectiveAtHover();
         }
     }
 #endif

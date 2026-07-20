@@ -33,36 +33,39 @@ uint16_t flightModeFlags = 0;
 static uint32_t enabledSensors = 0;
 
 // Must be no longer than OSD_WARNINGS_MAX_SIZE (11) to be displayed fully in OSD
+// Order MUST match the bit positions in armingDisableFlags_e (runtime_config.h).
+// Index i corresponds to bit i; consumer code (cli.c, osd_warnings.c) looks
+// up names by bit position.
 const char *armingDisableFlagNames[]= {
-    "NOGYRO",
-    "FAILSAFE",
-    "RXLOSS",
-    "BADRX",
-    "BOXFAILSAFE",
-    "RUNAWAY",
-    "CRASH",
-    "THROTTLE",
-    "ANGLE",
-    "BOOTGRACE",
-    "NOPREARM",
-    "LOAD",
-    "CALIB",
-    "CLI",
-    "CMS",
-    "BST",
-    "MSP",
-    "PARALYZE",
-    "GPS",
-    "RESCUE_SW",
-    "RPMFILTER",
-    "ALTHOLD",
-    "POSHOLD",
-    "REBOOT_REQD",
-    "DSHOT_BBANG",
-    "NO_ACC_CAL",
-    "MOTOR_PROTO",
-    "OVERRIDE",
-    "ARMSWITCH",
+    "NOGYRO",        // bit 0
+    "FAILSAFE",      // bit 1
+    "RXLOSS",        // bit 2
+    "BADRX",         // bit 3
+    "BOXFAILSAFE",   // bit 4
+    "RUNAWAY",       // bit 5
+    "CRASH",         // bit 6
+    "THROTTLE",      // bit 7
+    "ANGLE",         // bit 8
+    "BOOTGRACE",     // bit 9
+    "NOPREARM",      // bit 10
+    "LOAD",          // bit 11
+    "CALIB",         // bit 12
+    "CLI",           // bit 13
+    "CMS",           // bit 14
+    "BST",           // bit 15
+    "MSP",           // bit 16
+    "PARALYZE",      // bit 17
+    "GPS",           // bit 18
+    "RESCUE_SW",     // bit 19
+    "RPMFILTER",     // bit 20
+    "REBOOT_REQD",   // bit 21
+    "DSHOT_BBANG",   // bit 22
+    "NO_ACC_CAL",    // bit 23
+    "MOTOR_PROTO",   // bit 24
+    "OVERRIDE",      // bit 25
+    "ALTHOLD",       // bit 26
+    "POSHOLD",       // bit 27
+    "ARMSWITCH",     // bit 28
 };
 
 static armingDisableFlags_e armingDisableFlags = 0;

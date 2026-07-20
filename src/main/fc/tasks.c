@@ -55,8 +55,6 @@
 #include "fc/rc_controls.h"
 #include "fc/runtime_config.h"
 
-#include "flight/position.h"
-#include "flight/position_estimator.h"
 #include "flight/pos_hold.h"
 #include "flight/imu.h"
 #include "flight/mixer.h"
@@ -261,15 +259,6 @@ static void taskUpdateBaro(timeUs_t currentTimeUs)
 }
 #endif
 
-#ifdef USE_ALTITUDE_HOLD
-static void taskUpdateAltitude(timeUs_t currentTimeUs)
-{
-    UNUSED(currentTimeUs);
-
-    positionUpdate();
-}
-#endif
-
 #ifdef USE_POSITION_HOLD
 static void taskUpdatePosHold(timeUs_t currentTimeUs)
 {
@@ -387,10 +376,6 @@ task_attribute_t task_attributes[TASK_COUNT] = {
 
 #ifdef USE_BARO
     [TASK_BARO] = DEFINE_TASK("BARO", NULL, NULL, taskUpdateBaro, TASK_PERIOD_HZ(20), TASK_PRIORITY_LOW),
-#endif
-
-#ifdef USE_ALTITUDE_HOLD
-    [TASK_ALTITUDE] = DEFINE_TASK("ALTITUDE", NULL, NULL, taskUpdateAltitude, TASK_PERIOD_HZ(100), TASK_PRIORITY_MEDIUM),
 #endif
 
 #ifdef USE_POSITION_HOLD
@@ -553,11 +538,9 @@ void tasksInit(void)
     setTaskEnabled(TASK_BARO, sensors(SENSOR_BARO));
 #endif
 
-#ifdef USE_ALTITUDE_HOLD
-    setTaskEnabled(TASK_ALTITUDE, true);
-#endif
-
 #ifdef USE_POSITION_HOLD
+    // TASK_POSHOLD drives both position hold and altitude hold (the estimator
+    // and controller now share this task slot to avoid a cross-task race).
     setTaskEnabled(TASK_POSHOLD, true);
 #endif
 

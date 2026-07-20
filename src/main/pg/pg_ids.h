@@ -80,9 +80,13 @@
 //#define PG_VTX_CONFIG 54 // CF 1.x
 #define PG_GPS_RESCUE 55 // struct OK
 #define PG_POSITION 56
-#define PG_POSHOLD_CONFIG 57
-#define PG_AUTOPILOT_CONFIG 58
-#define PG_VTX_IO_CONFIG 59
+#define PG_VTX_IO_CONFIG 57
+// IDs 58 and 59 are reserved to preserve compatibility with any external
+// tooling that may have been built against the post-56 range. The new
+// autopilot/pos_hold PGs use 60 and 61 so existing config backups that
+// store PG_VTX_IO_CONFIG under ID 57 are not silently reinterpreted.
+#define PG_POSHOLD_CONFIG 60
+#define PG_AUTOPILOT_CONFIG 61
 
 // Driver configuration
 #define PG_DRIVER_PWM_RX_CONFIG 100 // does not exist in betaflight

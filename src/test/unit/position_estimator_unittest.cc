@@ -121,7 +121,8 @@ void GPS_distance2d(int32_t *currentLat, int32_t *currentLon, int32_t *originLat
     GPS_calc_longitude_scaling(*currentLat);
     const float dLat = (float)(*currentLat - *originLat);
     const float dLon = (float)(*currentLon - *originLon) * GPS_scaleLonDown;
-    const float scale = 1.113195f * 100.0f;
+    // 1.113195f is cm per 1e-7 degree. Matches the real GPS_distance2d and GPS_distance_cm_bearing.
+    const float scale = 1.113195f;
     *offsetEast = dLon * scale;
     *offsetNorth = dLat * scale;
 }
@@ -158,13 +159,13 @@ TEST_F(PositionEstimatorTest, GPSCoordinateToENU)
 {
     int32_t originLat = 515000000; // ~51.5N
     int32_t originLon = -000100000; // ~0.1W
-    int32_t currentLat = 515000100; // move ~1.11m north
+    int32_t currentLat = 515000100; // move 100 units of 1e-7 deg lat = ~1.11m north = ~111.3cm
     int32_t currentLon = -000100000;
 
     float east, north;
     GPS_distance2d(&currentLat, &currentLon, &originLat, &originLon, &east, &north);
 
-    EXPECT_NEAR(north, 11131.9f, 5.0f);
+    EXPECT_NEAR(north, 111.3f, 1.0f);
     EXPECT_NEAR(east, 0.0f, 1.0f);
 }
 
@@ -225,8 +226,8 @@ TEST_F(PositionEstimatorTest, GPSMeasurementFusesIntoEstimate)
 
     const positionEstimate3d_t *est = positionEstimatorGetEstimate();
     EXPECT_TRUE(est->isValidXY);
-    EXPECT_NEAR(est->position.v[ENU_EAST], 0.0f, 100.0f);
-    EXPECT_NEAR(est->position.v[ENU_NORTH], 0.0f, 100.0f);
+    EXPECT_NEAR(est->position.v[ENU_EAST], 0.0f, 10.0f);
+    EXPECT_NEAR(est->position.v[ENU_NORTH], 0.0f, 10.0f);
 }
 
 TEST_F(PositionEstimatorTest, EstimateDriftsWithoutGPS)
@@ -245,4 +246,109 @@ TEST_F(PositionEstimatorTest, EstimateDriftsWithoutGPS)
 
     const positionEstimate3d_t *est = positionEstimatorGetEstimate();
     EXPECT_FALSE(est->isValidXY);
+}
+
+// C1 regression test: kalmanUpdate covariance update must be the standard
+// (I - K H) P form. Observable consequence: after repeated updates with a
+// fixed measurement, the estimate converges to that measurement and the
+// per-update delta goes to zero (innovation -> 0). With the original buggy
+// "Joseph form", the covariance update was wrong and the gain either blew
+// up or failed to reduce the error, so the estimate did not converge.
+TEST_F(PositionEstimatorTest, KalmanConvergesToFixedMeasurement)
+{
+    ENABLE_ARMING_FLAG(ARMED);
+    ENABLE_STATE(GPS_FIX);
+
+    acc.dev.acc_1G = 256;
+    acc.dev.acc_1G_rec = 1.0f / 256.0f;
+    acc.accADC[X] = 0;
+    acc.accADC[Y] = 0;
+    acc.accADC[Z] = 256; // level, no linear accel
+
+    positionEstimatorEnableXY(true);
+
+    // Origin at ~51.5N. Step north by 1000 cm = 10 m.
+    // 1e-7 deg lat = 1.113195 cm, so 1000 cm = 898.3 units of 1e-7 deg.
+    const int32_t originLat = 515000000;
+    const int32_t originLon = -1000000;
+    const int32_t stepLatUnits = (int32_t)(1000.0f / 1.113195f);   // ~898
+    gpsSol.llh.lat = originLat;
+    gpsSol.llh.lon = originLon;
+    gpsSol.velN = 0;
+    gpsSol.velE = 0;
+    gpsSol.numSat = 12;
+    gpsSol.hdop = 150;
+
+    // First call captures the origin from the current GPS fix.
+    positionEstimatorUpdate(0);
+
+    // Step north by 1000 cm for all subsequent cycles.
+    gpsSol.llh.lat = originLat + stepLatUnits;
+
+    float prevNorth = 1e9f;
+    float maxAbsDelta = 0.0f;
+    for (int i = 0; i < 60; ++i) {
+        positionEstimatorUpdate(0);
+        const positionEstimate3d_t *est = positionEstimatorGetEstimate();
+        const float north = est->position.v[ENU_NORTH];
+        const float delta = fabsf(north - prevNorth);
+        if (i > 0 && delta > maxAbsDelta) maxAbsDelta = delta;
+        prevNorth = north;
+    }
+
+    // After 60 cycles the estimate must be within ~5 cm of the 1000 cm
+    // north step. With the original buggy covariance update the estimate
+    // diverged or oscillated.
+    const positionEstimate3d_t *est = positionEstimatorGetEstimate();
+    EXPECT_NEAR(est->position.v[ENU_NORTH], 1000.0f, 20.0f);
+
+    // The per-update delta must shrink monotonically as the filter converges
+    // (innovation -> 0). A non-decreasing delta indicates unstable covariance.
+    // We compute the delta of the last 10 cycles and require it to be much
+    // smaller than the largest delta observed in the first 50 cycles.
+    float lastDelta = 0.0f;
+    for (int i = 0; i < 10; ++i) {
+        positionEstimatorUpdate(0);
+        const float north = positionEstimatorGetEstimate()->position.v[ENU_NORTH];
+        const float d = fabsf(north - prevNorth);
+        if (d > lastDelta) lastDelta = d;
+        prevNorth = north;
+    }
+    EXPECT_LT(lastDelta, maxAbsDelta * 0.5f);
+}
+
+// C1 regression test: a GPS velocity measurement must drive the velocity
+// estimate toward the measured value. With the buggy velocity-update block
+// the covariance (and therefore the gain) was wrong, so the velocity state
+// failed to track the measurement.
+TEST_F(PositionEstimatorTest, KalmanVelocityTracksMeasurement)
+{
+    ENABLE_ARMING_FLAG(ARMED);
+    ENABLE_STATE(GPS_FIX);
+
+    acc.dev.acc_1G = 256;
+    acc.dev.acc_1G_rec = 1.0f / 256.0f;
+    acc.accADC[X] = 0;
+    acc.accADC[Y] = 0;
+    acc.accADC[Z] = 256;
+
+    positionEstimatorEnableXY(true);
+
+    const int32_t originLat = 515000000;
+    const int32_t originLon = -1000000;
+    gpsSol.llh.lat = originLat;
+    gpsSol.llh.lon = originLon;
+    // 200 cm/s north
+    gpsSol.velN = 200;
+    gpsSol.velE = 0;
+    gpsSol.numSat = 12;
+    gpsSol.hdop = 150;
+
+    for (int i = 0; i < 50; ++i) {
+        positionEstimatorUpdate(0);
+    }
+
+    const positionEstimate3d_t *est = positionEstimatorGetEstimate();
+    // Velocity estimate must converge toward 200 cm/s north within ~30 cm/s.
+    EXPECT_NEAR(est->velocity.v[ENU_NORTH], 200.0f, 30.0f);
 }

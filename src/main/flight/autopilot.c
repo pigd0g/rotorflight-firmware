@@ -474,6 +474,16 @@ float getAutopilotCollective(void)
     return collectiveOut;
 }
 
+float getAutopilotHoverCollective(void)
+{
+    return capturedHoverCollective;
+}
+
+void autopilotFreezeCollectiveAtHover(void)
+{
+    collectiveOut = capturedHoverCollective;
+}
+
 void autopilotSetSticksActive(bool active)
 {
     ap.wasSticksActive = ap.sticksActive;

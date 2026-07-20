@@ -116,7 +116,7 @@ static inline void kalmanInit(positionKalman_t *kf, float qPos, float qVel, floa
 
 // Predict step: integrate acceleration over dt.
 // x = F*x + B*u, P = F*P*F' + Q
-static void kalmanPredict(positionKalman_t *kf, float accel, float dt)
+STATIC_UNIT_TESTED void kalmanPredict(positionKalman_t *kf, float accel, float dt)
 {
     const float dt2 = dt * dt;
     const float dt3 = dt2 * dt;
@@ -133,9 +133,11 @@ static void kalmanPredict(positionKalman_t *kf, float accel, float dt)
 }
 
 // Correct step with position and velocity measurements.
-static void kalmanUpdate(positionKalman_t *kf, float posMeasured, float velMeasured, float rPos, float rVel)
+// Standard one-sided covariance update P' = (I - K H) P, valid for R > 0
+// and independent measurements. Symmetry is preserved by writing P[1][0] = P[0][1].
+STATIC_UNIT_TESTED void kalmanUpdate(positionKalman_t *kf, float posMeasured, float velMeasured, float rPos, float rVel)
 {
-    // Position update
+    // Position update (H = [1, 0])
     const float yPos = posMeasured - kf->x[0];
     const float sPos = kf->p[0][0] + rPos;
     if (sPos > 0.0f) {
@@ -144,22 +146,23 @@ static void kalmanUpdate(positionKalman_t *kf, float posMeasured, float velMeasu
         kf->x[0] += kPos0 * yPos;
         kf->x[1] += kPos1 * yPos;
 
-        // Joseph form covariance update for numerical stability
         const float p00 = kf->p[0][0];
         const float p01 = kf->p[0][1];
         const float p10 = kf->p[1][0];
         const float p11 = kf->p[1][1];
 
+        // (I - K H) P with H = [1, 0], K = [kPos0, kPos1]ᵀ
+        // (I - K H) = [[1-kPos0, 0], [-kPos1, 1]]
         const float c00 = 1.0f - kPos0;
         const float c10 = -kPos1;
 
-        kf->p[0][0] = c00 * p00 + c10 * p01;
-        kf->p[0][1] = c00 * p10 + c10 * p11;
-        kf->p[1][0] = kf->p[0][1];
-        kf->p[1][1] = c00 * p11 + c10 * p11; // simplified
+        kf->p[0][0] = c00 * p00;
+        kf->p[0][1] = c00 * p01;
+        kf->p[1][0] = c10 * p00 + p10;
+        kf->p[1][1] = c10 * p01 + p11;
     }
 
-    // Velocity update
+    // Velocity update (H = [0, 1])
     const float yVel = velMeasured - kf->x[1];
     const float sVel = kf->p[1][1] + rVel;
     if (sVel > 0.0f) {
@@ -173,13 +176,15 @@ static void kalmanUpdate(positionKalman_t *kf, float posMeasured, float velMeasu
         const float p10 = kf->p[1][0];
         const float p11 = kf->p[1][1];
 
+        // (I - K H) P with H = [0, 1], K = [kVel0, kVel1]ᵀ
+        // (I - K H) = [[1, -kVel0], [0, 1-kVel1]]
         const float c01 = -kVel0;
         const float c11 = 1.0f - kVel1;
 
-        kf->p[0][0] = c01 * p00 + c11 * p01;
-        kf->p[0][1] = c01 * p10 + c11 * p11;
-        kf->p[1][0] = kf->p[0][1];
-        kf->p[1][1] = c01 * p10 + c11 * p11;
+        kf->p[0][0] = p00 + c01 * p10;
+        kf->p[0][1] = p01 + c01 * p11;
+        kf->p[1][0] = c11 * p10;
+        kf->p[1][1] = c11 * p11;
     }
 }
 

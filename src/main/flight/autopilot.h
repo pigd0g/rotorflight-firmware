@@ -33,6 +33,11 @@ void autopilotAltitudeControl(void);
 float getAutopilotAngle(unsigned axis);
 float getAutopilotThrottle(void);
 float getAutopilotCollective(void);
+float getAutopilotHoverCollective(void);
+
+// Called by pos_hold when altitude sensors are lost: freezes the collective
+// output at the captured hover collective to prevent uncommanded climb/descent.
+void autopilotFreezeCollectiveAtHover(void);
 
 void autopilotSetSticksActive(bool active);
 void autopilotDisarmCleanup(void);
