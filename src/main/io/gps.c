@@ -1223,6 +1223,11 @@ static bool gpsNewFrameNMEA(char c)
                         *gpsPacketLogChar = LOG_NMEA_RMC;
                         gpsSol.groundSpeed = gps_Msg.speed;
                         gpsSol.groundCourse = gps_Msg.ground_course;
+                        {
+                            const float courseRad = gps_Msg.ground_course * 0.1f * RAD;
+                            gpsSol.velN = gps_Msg.speed * cosf(courseRad);
+                            gpsSol.velE = gps_Msg.speed * sinf(courseRad);
+                        }
 #ifdef USE_RTC_TIME
                         // This check will miss 00:00:00.00, but we shouldn't care - next report will be valid
                         if(!rtcHasTime() && gps_Msg.date != 0 && gps_Msg.time != 0) {
@@ -1507,6 +1512,8 @@ static bool UBLOX_parse_gps(void)
         break;
     case MSG_VELNED:
         *gpsPacketLogChar = LOG_UBLOX_VELNED;
+        gpsSol.velN = _buffer.velned.ned_north / 100;   // cm/s
+        gpsSol.velE = _buffer.velned.ned_east / 100;     // cm/s
         gpsSol.speed3d = _buffer.velned.speed_3d;       // cm/s
         gpsSol.groundSpeed = _buffer.velned.speed_2d;    // cm/s
         gpsSol.groundCourse = (uint16_t) (_buffer.velned.heading_2d / 10000);     // Heading 2D deg * 100000 rescaled to deg * 10
@@ -1522,6 +1529,8 @@ static bool UBLOX_parse_gps(void)
         _new_position = true;
         gpsSol.numSat = _buffer.pvt.numSV;
         gpsSol.hdop = _buffer.pvt.pDOP;
+        gpsSol.velE = _buffer.pvt.velE / 10;              // mm/s -> cm/s
+        gpsSol.velN = _buffer.pvt.velN / 10;              // mm/s -> cm/s
         gpsSol.speed3d = (uint16_t) sqrtf(sqf(_buffer.pvt.gSpeed / 10.0f) + sqf(_buffer.pvt.velD / 10.0f));
         gpsSol.groundSpeed = _buffer.pvt.gSpeed / 10;    // cm/s
         gpsSol.groundCourse = (uint16_t) (_buffer.pvt.headMot / 10000);     // Heading 2D deg * 100000 rescaled to deg * 10
@@ -1845,6 +1854,22 @@ void GPS_distance_cm_bearing(int32_t *currentLat1, int32_t *currentLon1, int32_t
     *bearing = 9000.0f + atan2_approx(-dLat, dLon) * TAN_89_99_DEGREES;      // Convert the output radians to 100xdeg
     if (*bearing < 0)
         *bearing += 36000;
+}
+
+// Get 2d distance in cm between two lat/lon points. Returns ENU (East, North) offsets in cm.
+void GPS_distance2d(int32_t *currentLat, int32_t *currentLon, int32_t *originLat, int32_t *originLon, float *offsetEast, float *offsetNorth)
+{
+    GPS_calc_longitude_scaling(*currentLat);
+
+    const float dLat = (float)(*currentLat - *originLat);
+    const float dLon = (float)(*currentLon - *originLon) * GPS_scaleLonDown;
+
+    // 1e-7 degrees * 1.113195f * 100 * 1000 = cm per 1e-7 degree
+    const float scale = DISTANCE_BETWEEN_TWO_LONGITUDE_POINTS_AT_EQUATOR_IN_HUNDREDS_OF_KILOMETERS * 100.0f;
+
+    // East  = dLon, North = dLat (ENU convention)
+    *offsetEast  = dLon * scale;
+    *offsetNorth = dLat * scale;
 }
 
 void GPS_calculateDistanceAndDirectionToHome(void)

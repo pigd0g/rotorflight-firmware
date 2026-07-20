@@ -90,7 +90,9 @@
 #include "pg/pg_ids.h"
 #include "pg/pinio.h"
 #include "pg/piniobox.h"
+#include "pg/pos_hold.h"
 #include "pg/position.h"
+#include "pg/autopilot.h"
 #include "pg/rx.h"
 #include "pg/rx_pwm.h"
 #include "pg/rx_spi.h"
@@ -417,6 +419,14 @@ static const char * const lookupTablePositionAltSource[] = {
     "DEFAULT", "BARO_ONLY", "GPS_ONLY"
 };
 
+static const char * const lookupTablePosHoldSource[] = {
+    "AUTO", "GPS_ONLY", "OPTICAL_FLOW_ONLY"
+};
+
+static const char * const lookupTableAutopilotYawMode[] = {
+    "VELOCITY", "BEARING", "HYBRID", "FIXED"
+};
+
 static const char * const lookupTableOffOnAuto[] = {
     "OFF", "ON", "AUTO"
 };
@@ -601,6 +611,8 @@ const lookupTableEntry_t lookupTables[] = {
 #endif
 
     LOOKUP_TABLE_ENTRY(lookupTablePositionAltSource),
+    LOOKUP_TABLE_ENTRY(lookupTablePosHoldSource),
+    LOOKUP_TABLE_ENTRY(lookupTableAutopilotYawMode),
     LOOKUP_TABLE_ENTRY(lookupTableOffOnAuto),
     LOOKUP_TABLE_ENTRY(lookupTableFeedforwardAveraging),
     LOOKUP_TABLE_ENTRY(lookupTableDshotBitbangedTimer),
@@ -1745,6 +1757,48 @@ const clivalue_t valueTable[] = {
     { "position_gps_offset_lpf",   VAR_UINT8 | MASTER_VALUE, .config.minmaxUnsigned = { 1, 250 }, PG_POSITION, offsetof(positionConfig_t, gps_offset_lpf) },
     { "position_gps_min_sats",     VAR_UINT8 | MASTER_VALUE, .config.minmaxUnsigned = { 0, 50 }, PG_POSITION, offsetof(positionConfig_t, gps_min_sats) },
     { "position_vario_lpf",        VAR_UINT8 | MASTER_VALUE, .config.minmaxUnsigned = { 1, 250 }, PG_POSITION, offsetof(positionConfig_t, vario_lpf) },
+
+    { "pos_hold_deadband",         VAR_UINT8 | MASTER_VALUE, .config.minmaxUnsigned = { 0, 50 }, PG_POSHOLD_CONFIG, offsetof(posHoldConfig_t, deadband) },
+    { "pos_hold_position_source",  VAR_UINT8 | MASTER_VALUE | MODE_LOOKUP, .config.lookup = { TABLE_POSHOLD_SOURCE }, PG_POSHOLD_CONFIG, offsetof(posHoldConfig_t, positionSource) },
+    { "pos_hold_min_sats",         VAR_UINT8 | MASTER_VALUE, .config.minmaxUnsigned = { 3, 50 }, PG_POSHOLD_CONFIG, offsetof(posHoldConfig_t, minSats) },
+    { "pos_hold_heading_required", VAR_UINT8 | MASTER_VALUE | MODE_LOOKUP, .config.lookup = { TABLE_OFF_ON }, PG_POSHOLD_CONFIG, offsetof(posHoldConfig_t, headingRequired) },
+    { "pos_hold_opticalflow_quality_min", VAR_UINT16 | MASTER_VALUE, .config.minmaxUnsigned = { 0, 1000 }, PG_POSHOLD_CONFIG, offsetof(posHoldConfig_t, opticalflowQualityMin) },
+    { "pos_hold_opticalflow_max_range",   VAR_UINT16 | MASTER_VALUE, .config.minmaxUnsigned = { 0, 1000 }, PG_POSHOLD_CONFIG, offsetof(posHoldConfig_t, opticalflowMaxRange) },
+
+    { "ap_position_p",             VAR_UINT8  | MASTER_VALUE, .config.minmaxUnsigned = { 0, 255 }, PG_AUTOPILOT_CONFIG, offsetof(autopilotConfig_t, positionP) },
+    { "ap_position_i",             VAR_UINT8  | MASTER_VALUE, .config.minmaxUnsigned = { 0, 255 }, PG_AUTOPILOT_CONFIG, offsetof(autopilotConfig_t, positionI) },
+    { "ap_position_d",             VAR_UINT8  | MASTER_VALUE, .config.minmaxUnsigned = { 0, 255 }, PG_AUTOPILOT_CONFIG, offsetof(autopilotConfig_t, positionD) },
+    { "ap_position_a",             VAR_UINT8  | MASTER_VALUE, .config.minmaxUnsigned = { 0, 255 }, PG_AUTOPILOT_CONFIG, offsetof(autopilotConfig_t, positionA) },
+    { "ap_position_cutoff",        VAR_UINT8  | MASTER_VALUE, .config.minmaxUnsigned = { 0, 255 }, PG_AUTOPILOT_CONFIG, offsetof(autopilotConfig_t, positionCutoff) },
+    { "ap_stop_threshold",         VAR_UINT8  | MASTER_VALUE, .config.minmaxUnsigned = { 0, 255 }, PG_AUTOPILOT_CONFIG, offsetof(autopilotConfig_t, stopThreshold) },
+    { "ap_max_angle",              VAR_UINT8  | MASTER_VALUE, .config.minmaxUnsigned = { 5, 80 }, PG_AUTOPILOT_CONFIG, offsetof(autopilotConfig_t, maxAngle) },
+    { "ap_velocity_control_enable",VAR_UINT8  | MASTER_VALUE | MODE_LOOKUP, .config.lookup = { TABLE_OFF_ON }, PG_AUTOPILOT_CONFIG, offsetof(autopilotConfig_t, velocityControlEnable) },
+    { "ap_velocity_p",             VAR_UINT8  | MASTER_VALUE, .config.minmaxUnsigned = { 0, 255 }, PG_AUTOPILOT_CONFIG, offsetof(autopilotConfig_t, velocityP) },
+    { "ap_velocity_i",             VAR_UINT8  | MASTER_VALUE, .config.minmaxUnsigned = { 0, 255 }, PG_AUTOPILOT_CONFIG, offsetof(autopilotConfig_t, velocityI) },
+    { "ap_velocity_d",             VAR_UINT8  | MASTER_VALUE, .config.minmaxUnsigned = { 0, 255 }, PG_AUTOPILOT_CONFIG, offsetof(autopilotConfig_t, velocityD) },
+    { "ap_velocity_drag_coeff",    VAR_UINT16 | MASTER_VALUE, .config.minmaxUnsigned = { 0, 1000 }, PG_AUTOPILOT_CONFIG, offsetof(autopilotConfig_t, velocityDragCoeff) },
+    { "ap_max_velocity",           VAR_UINT16 | MASTER_VALUE, .config.minmaxUnsigned = { 50, 1000 }, PG_AUTOPILOT_CONFIG, offsetof(autopilotConfig_t, maxVelocity) },
+    { "ap_velocity_buildup_max_pitch", VAR_UINT8 | MASTER_VALUE, .config.minmaxUnsigned = { 0, 80 }, PG_AUTOPILOT_CONFIG, offsetof(autopilotConfig_t, velocityBuildupMaxPitch) },
+    { "ap_altitude_p",             VAR_UINT8  | MASTER_VALUE, .config.minmaxUnsigned = { 0, 255 }, PG_AUTOPILOT_CONFIG, offsetof(autopilotConfig_t, altitudeP) },
+    { "ap_altitude_i",             VAR_UINT8  | MASTER_VALUE, .config.minmaxUnsigned = { 0, 255 }, PG_AUTOPILOT_CONFIG, offsetof(autopilotConfig_t, altitudeI) },
+    { "ap_altitude_d",             VAR_UINT8  | MASTER_VALUE, .config.minmaxUnsigned = { 0, 255 }, PG_AUTOPILOT_CONFIG, offsetof(autopilotConfig_t, altitudeD) },
+    { "ap_altitude_f",             VAR_UINT8  | MASTER_VALUE, .config.minmaxUnsigned = { 0, 255 }, PG_AUTOPILOT_CONFIG, offsetof(autopilotConfig_t, altitudeF) },
+    { "ap_hover_collective",       VAR_UINT16 | MASTER_VALUE, .config.minmaxUnsigned = { 0, 1000 }, PG_AUTOPILOT_CONFIG, offsetof(autopilotConfig_t, hoverCollective) },
+    { "ap_collective_min",         VAR_INT16  | MASTER_VALUE, .config.minmax = { -1000, 1000 }, PG_AUTOPILOT_CONFIG, offsetof(autopilotConfig_t, collectiveMin) },
+    { "ap_collective_max",         VAR_INT16  | MASTER_VALUE, .config.minmax = { -1000, 1000 }, PG_AUTOPILOT_CONFIG, offsetof(autopilotConfig_t, collectiveMax) },
+
+    { "ap_alt_hold_min_throttle",  VAR_UINT16 | MASTER_VALUE, .config.minmaxUnsigned = { 1000, 2000 }, PG_AUTOPILOT_CONFIG, offsetof(autopilotConfig_t, altHoldMinThrottle) },
+    { "ap_alt_hold_max_throttle",  VAR_UINT16 | MASTER_VALUE, .config.minmaxUnsigned = { 1000, 2000 }, PG_AUTOPILOT_CONFIG, offsetof(autopilotConfig_t, altHoldMaxThrottle) },
+    { "ap_landing_altitude_m",     VAR_UINT8  | MASTER_VALUE, .config.minmaxUnsigned = { 0, 20 }, PG_AUTOPILOT_CONFIG, offsetof(autopilotConfig_t, landingAltitudeM) },
+    { "ap_waypoint_arrival_radius",VAR_UINT16 | MASTER_VALUE, .config.minmaxUnsigned = { 10, 2000 }, PG_AUTOPILOT_CONFIG, offsetof(autopilotConfig_t, waypointArrivalRadius) },
+    { "ap_waypoint_hold_radius",   VAR_UINT16 | MASTER_VALUE, .config.minmaxUnsigned = { 10, 2000 }, PG_AUTOPILOT_CONFIG, offsetof(autopilotConfig_t, waypointHoldRadius) },
+    { "ap_stick_deadband",         VAR_UINT16 | MASTER_VALUE, .config.minmaxUnsigned = { 0, 1000 }, PG_AUTOPILOT_CONFIG, offsetof(autopilotConfig_t, stickDeadband) },
+    { "ap_alt_hold_deadband",      VAR_UINT16 | MASTER_VALUE, .config.minmaxUnsigned = { 0, 1000 }, PG_AUTOPILOT_CONFIG, offsetof(autopilotConfig_t, altHoldDeadband) },
+    { "ap_yaw_mode",               VAR_UINT8  | MASTER_VALUE | MODE_LOOKUP, .config.lookup = { TABLE_AUTOPILOT_YAW_MODE }, PG_AUTOPILOT_CONFIG, offsetof(autopilotConfig_t, yawMode) },
+    { "ap_yaw_p",                  VAR_UINT16 | MASTER_VALUE, .config.minmaxUnsigned = { 0, 1000 }, PG_AUTOPILOT_CONFIG, offsetof(autopilotConfig_t, yawP) },
+    { "ap_yaw_d",                  VAR_UINT16 | MASTER_VALUE, .config.minmaxUnsigned = { 0, 1000 }, PG_AUTOPILOT_CONFIG, offsetof(autopilotConfig_t, yawD) },
+    { "ap_max_yaw_rate",           VAR_UINT16 | MASTER_VALUE, .config.minmaxUnsigned = { 0, 1000 }, PG_AUTOPILOT_CONFIG, offsetof(autopilotConfig_t, maxYawRate) },
+    { "ap_min_forward_velocity",   VAR_UINT16 | MASTER_VALUE, .config.minmaxUnsigned = { 0, 1000 }, PG_AUTOPILOT_CONFIG, offsetof(autopilotConfig_t, minForwardVelocity) },
 
 // PG_MODE_ACTIVATION_CONFIG
 #if defined(USE_CUSTOM_BOX_NAMES)

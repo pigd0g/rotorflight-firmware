@@ -43,6 +43,8 @@ typedef struct gpsLocation_s {
 
 typedef struct gpsSolutionData_s {
     gpsLocation_t llh;
+    int16_t velE;                   // east velocity in cm/s
+    int16_t velN;                   // north velocity in cm/s
     uint16_t speed3d;              // speed in 0.1m/s
     uint16_t groundSpeed;           // speed in 0.1m/s
     uint16_t groundCourse;          // degrees * 10
@@ -140,4 +142,5 @@ void onGpsNewData(void);
 void GPS_reset_home_position(void);
 void GPS_calc_longitude_scaling(int32_t lat);
 void GPS_distance_cm_bearing(int32_t *currentLat1, int32_t *currentLon1, int32_t *destinationLat2, int32_t *destinationLon2, uint32_t *dist, int32_t *bearing);
+void GPS_distance2d(int32_t *currentLat, int32_t *currentLon, int32_t *originLat, int32_t *originLon, float *offsetEast, float *offsetNorth);
 void gpsSetFixState(bool state);

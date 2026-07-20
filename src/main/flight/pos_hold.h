@@ -17,24 +17,21 @@
 
 #pragma once
 
+#include <stdbool.h>
+#include <stdint.h>
+
+#include "common/axis.h"
+#include "common/time.h"
+
 #include "flight/position_estimator.h"
 
-void positionInit(void);
-void positionUpdate(void);
+#define POSHOLD_TASK_RATE_HZ 100
 
-#ifdef USE_POSITION_HOLD
-void positionEstimatorInit(void);
-void positionEstimatorEnableXY(bool enable);
-void positionEstimatorUpdate(timeUs_t currentTimeUs);
-const positionEstimate3d_t *positionEstimatorGetEstimate(void);
-bool positionEstimatorIsValidXY(void);
-bool positionEstimatorIsHeadingRequired(void);
-void positionEstimatorSetSticksActive(bool active);
-bool positionEstimatorIsSticksActive(void);
-#endif
+void posHoldInit(void);
+void updatePosHold(timeUs_t currentTimeUs);
 
-float getAltitude(void);
-float getVario(void);
+bool isPosHoldInControl(void);
+bool posHoldFailure(void);
+bool altHoldFailure(void);
 
-int getEstimatedAltitudeCm(void);
-int getEstimatedVarioCms(void);
+extern float posHoldAngle[ANGLE_INDEX_COUNT]; // degrees

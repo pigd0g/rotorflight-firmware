@@ -172,6 +172,19 @@ gps_conversion_unittest_SRC := \
 		$(USER_DIR)/common/gps_conversion.c
 
 
+position_estimator_unittest_SRC := \
+		$(USER_DIR)/flight/position_estimator.c \
+		$(USER_DIR)/common/filter.c \
+		$(USER_DIR)/common/maths.c
+
+position_estimator_unittest_DEFINES := \
+		USE_POSITION_HOLD= \
+		USE_GPS=
+
+position_estimator_unittest_INCLUDE_DIRS := \
+		$(USER_DIR)
+
+
 io_serial_unittest_SRC := \
 		$(USER_DIR)/io/serial.c \
 		$(USER_DIR)/pg/serial.c \

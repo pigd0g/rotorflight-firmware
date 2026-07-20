@@ -45,6 +45,11 @@
 #include "flight/imu.h"
 #include "flight/gps_rescue.h"
 
+#ifdef USE_POSITION_HOLD
+#include "flight/pos_hold.h"
+#include "flight/autopilot.h"
+#endif
+
 #include "sensors/acceleration.h"
 #include "sensors/gyro.h"
 
@@ -121,6 +126,11 @@ static float calcLevelErrorAngle(int axis)
 
 #ifdef USE_GPS_RESCUE
     angle += gpsRescueAngle[axis] / 100.0f; // ANGLE IS IN CENTIDEGREES
+#endif
+#ifdef USE_POSITION_HOLD
+    if (isPosHoldInControl()) {
+        angle += getAutopilotAngle(axis); // degrees
+    }
 #endif
     angle = constrainf(angle, -level.AngleLimit, level.AngleLimit);
 

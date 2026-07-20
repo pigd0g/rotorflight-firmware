@@ -337,7 +337,15 @@
 
 #if !defined(USE_ACC)
 #undef USE_GPS_RESCUE
+#undef USE_POSITION_HOLD
+#undef USE_ALTITUDE_HOLD
 #undef USE_ACRO_TRAINER
+#endif
+
+#if !defined(USE_GPS)
+#undef USE_POSITION_HOLD
+#undef USE_ALTITUDE_HOLD
+#undef USE_GPS_RESCUE
 #endif
 
 #if (!defined(USE_GPS_RESCUE) || !defined(USE_CMS_FAILSAFE_MENU))

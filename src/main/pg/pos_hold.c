@@ -15,26 +15,23 @@
  * along with this software. If not, see <https://www.gnu.org/licenses/>.
  */
 
-#pragma once
-
-#include "flight/position_estimator.h"
-
-void positionInit(void);
-void positionUpdate(void);
+#include "platform.h"
 
 #ifdef USE_POSITION_HOLD
-void positionEstimatorInit(void);
-void positionEstimatorEnableXY(bool enable);
-void positionEstimatorUpdate(timeUs_t currentTimeUs);
-const positionEstimate3d_t *positionEstimatorGetEstimate(void);
-bool positionEstimatorIsValidXY(void);
-bool positionEstimatorIsHeadingRequired(void);
-void positionEstimatorSetSticksActive(bool active);
-bool positionEstimatorIsSticksActive(void);
+
+#include "pg/pg.h"
+#include "pg/pg_ids.h"
+#include "pg/pos_hold.h"
+
+PG_REGISTER_WITH_RESET_TEMPLATE(posHoldConfig_t, posHoldConfig, PG_POSHOLD_CONFIG, 0);
+
+PG_RESET_TEMPLATE(posHoldConfig_t, posHoldConfig,
+    .deadband = 5,
+    .positionSource = POSHOLD_SOURCE_AUTO,
+    .minSats = 12,
+    .headingRequired = 1,
+    .opticalflowQualityMin = 30,
+    .opticalflowMaxRange = 400,
+);
+
 #endif
-
-float getAltitude(void);
-float getVario(void);
-
-int getEstimatedAltitudeCm(void);
-int getEstimatedVarioCms(void);

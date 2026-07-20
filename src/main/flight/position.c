@@ -101,6 +101,10 @@ static float calculateVario(float altitude)
 
 void positionUpdate(void)
 {
+#ifdef USE_POSITION_HOLD
+    positionEstimatorUpdate(0);
+#endif
+
 #ifdef USE_BARO
     if (alt.source == ALT_SOURCE_DEFAULT || alt.source == ALT_SOURCE_BARO_ONLY) {
         if (sensors(SENSOR_BARO) && baroIsReady()) {
@@ -176,4 +180,8 @@ void INIT_CODE positionInit(void)
 
     lowpassFilterInit(&alt.gpsOffsetFilter, LPF_PT2, positionConfig()->gps_offset_lpf / 1000.0f, pidGetPidFrequency(), LPF_EWMA);
     lowpassFilterInit(&alt.baroOffsetFilter, LPF_PT2, positionConfig()->baro_offset_lpf / 1000.0f, pidGetPidFrequency(), LPF_EWMA);
+
+#ifdef USE_POSITION_HOLD
+    positionEstimatorInit();
+#endif
 }

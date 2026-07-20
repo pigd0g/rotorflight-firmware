@@ -105,6 +105,7 @@ static const box_t boxes[CHECKBOX_ITEM_COUNT] =
     BOXITEM(BOXGOVFALLBACK, "GOVERNOR FALLBACK", 55),
     BOXITEM(BOXGOVSUSPEND, "GOVERNOR SUSPEND", 56),
     BOXITEM(BOXGOVBYPASS, "GOVERNOR BYPASS", 57),
+    BOXITEM(BOXPOSHOLD, "POS HOLD", 58),
 };
 
 // mask of enabled IDs, calculated on startup based on enabled features. boxId_e is used as bit index
@@ -207,6 +208,12 @@ void initActiveBoxIds(void)
     if (featureIsEnabled(FEATURE_GPS)) {
 #ifdef USE_GPS_RESCUE
         BME(BOXGPSRESCUE);
+#endif
+#ifdef USE_POSITION_HOLD
+        BME(BOXPOSHOLD);
+#endif
+#ifdef USE_ALTITUDE_HOLD
+        BME(BOXALTHOLD);
 #endif
         BME(BOXBEEPGPSCOUNT);
     }

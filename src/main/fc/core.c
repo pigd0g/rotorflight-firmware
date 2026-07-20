@@ -322,6 +322,25 @@ void updateArmingStatus(void)
         }
 #endif
 
+#ifdef USE_ALTITUDE_HOLD
+        if (IS_RC_MODE_ACTIVE(BOXALTHOLD)
+            && (!sensors(SENSOR_BARO) || !baroIsCalibrationComplete())) {
+            setArmingDisabled(ARMING_DISABLED_ALTHOLD);
+        } else {
+            unsetArmingDisabled(ARMING_DISABLED_ALTHOLD);
+        }
+#endif
+
+#ifdef USE_POSITION_HOLD
+        if (IS_RC_MODE_ACTIVE(BOXPOSHOLD)
+            && !positionEstimatorIsValidXY()
+            && !ARMING_FLAG(WAS_EVER_ARMED)) {
+            setArmingDisabled(ARMING_DISABLED_POSHOLD);
+        } else {
+            unsetArmingDisabled(ARMING_DISABLED_POSHOLD);
+        }
+#endif
+
         if (IS_RC_MODE_ACTIVE(BOXRESCUE)) {
             setArmingDisabled(ARMING_DISABLED_RESC);
         } else {
@@ -698,6 +717,29 @@ void processRxModes(timeUs_t currentTimeUs)
             DISABLE_FLIGHT_MODE(HORIZON_MODE);
             DISABLE_FLIGHT_MODE(TRAINER_MODE);
         }
+
+#ifdef USE_ALTITUDE_HOLD
+        if (ARMING_FLAG(ARMED)
+            && !FLIGHT_MODE(GPS_RESCUE_MODE)
+            && IS_RC_MODE_ACTIVE(BOXALTHOLD)
+            && sensors(SENSOR_BARO)
+            && baroIsCalibrationComplete()) {
+            if (!FLIGHT_MODE(ALTHOLD_MODE)) ENABLE_FLIGHT_MODE(ALTHOLD_MODE);
+        } else {
+            DISABLE_FLIGHT_MODE(ALTHOLD_MODE);
+        }
+#endif
+
+#ifdef USE_POSITION_HOLD
+        if (ARMING_FLAG(ARMED)
+            && !FLIGHT_MODE(GPS_RESCUE_MODE)
+            && IS_RC_MODE_ACTIVE(BOXPOSHOLD)
+            && sensors(SENSOR_ACC)) {
+            if (!FLIGHT_MODE(POS_HOLD_MODE)) ENABLE_FLIGHT_MODE(POS_HOLD_MODE);
+        } else {
+            DISABLE_FLIGHT_MODE(POS_HOLD_MODE);
+        }
+#endif
     }
 
 #ifdef USE_ACRO_TRAINER

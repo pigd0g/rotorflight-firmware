@@ -17,24 +17,24 @@
 
 #pragma once
 
-#include "flight/position_estimator.h"
+#include <stdint.h>
+#include <stdbool.h>
 
-void positionInit(void);
-void positionUpdate(void);
+#include "pg/pg.h"
 
-#ifdef USE_POSITION_HOLD
-void positionEstimatorInit(void);
-void positionEstimatorEnableXY(bool enable);
-void positionEstimatorUpdate(timeUs_t currentTimeUs);
-const positionEstimate3d_t *positionEstimatorGetEstimate(void);
-bool positionEstimatorIsValidXY(void);
-bool positionEstimatorIsHeadingRequired(void);
-void positionEstimatorSetSticksActive(bool active);
-bool positionEstimatorIsSticksActive(void);
-#endif
+typedef enum {
+    POSHOLD_SOURCE_AUTO = 0,
+    POSHOLD_SOURCE_GPS_ONLY,
+    POSHOLD_SOURCE_OPTICALFLOW_ONLY,
+} posHoldSource_e;
 
-float getAltitude(void);
-float getVario(void);
+typedef struct posHoldConfig_s {
+    uint8_t  deadband;
+    uint8_t  positionSource;
+    uint8_t  minSats;
+    uint8_t  headingRequired;       // require mag or GPS heading for position hold
+    uint16_t opticalflowQualityMin;
+    uint16_t opticalflowMaxRange;
+} posHoldConfig_t;
 
-int getEstimatedAltitudeCm(void);
-int getEstimatedVarioCms(void);
+PG_DECLARE(posHoldConfig_t, posHoldConfig);

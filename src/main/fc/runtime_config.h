@@ -61,12 +61,14 @@ typedef enum {
     ARMING_DISABLED_GPS             = (1 << 18),
     ARMING_DISABLED_RESC            = (1 << 19),
     ARMING_DISABLED_RPMFILTER       = (1 << 20),
-    ARMING_DISABLED_REBOOT_REQUIRED = (1 << 21),
-    ARMING_DISABLED_DSHOT_BITBANG   = (1 << 22),
-    ARMING_DISABLED_ACC_CALIBRATION = (1 << 23),
-    ARMING_DISABLED_MOTOR_PROTOCOL  = (1 << 24),
-    ARMING_DISABLED_OVERRIDE        = (1 << 25),
-    ARMING_DISABLED_ARM_SWITCH      = (1 << 26), // Needs to be the last element, since it's always activated if one of the others is active when arming
+    ARMING_DISABLED_ALTHOLD         = (1 << 21),
+    ARMING_DISABLED_POSHOLD         = (1 << 22),
+    ARMING_DISABLED_REBOOT_REQUIRED = (1 << 23),
+    ARMING_DISABLED_DSHOT_BITBANG   = (1 << 25),
+    ARMING_DISABLED_ACC_CALIBRATION = (1 << 26),
+    ARMING_DISABLED_MOTOR_PROTOCOL  = (1 << 27),
+    ARMING_DISABLED_OVERRIDE        = (1 << 28),
+    ARMING_DISABLED_ARM_SWITCH      = (1 << 29), // Needs to be the last element, since it's always activated if one of the others is active when arming
 } armingDisableFlags_e;
 
 #define ARMING_DISABLE_FLAGS_COUNT (LOG2(ARMING_DISABLED_ARM_SWITCH) + 1)
@@ -86,6 +88,7 @@ typedef enum {
     ALTHOLD_MODE_BIT     = 4,
     RESCUE_MODE_BIT      = 5,
     GPS_RESCUE_MODE_BIT  = 6,
+    POSHOLD_MODE_BIT     = 7,
 } flightModeBits_e;
 
 typedef enum {
@@ -96,6 +99,7 @@ typedef enum {
     ALTHOLD_MODE         = BIT(ALTHOLD_MODE_BIT),
     RESCUE_MODE          = BIT(RESCUE_MODE_BIT),
     GPS_RESCUE_MODE      = BIT(GPS_RESCUE_MODE_BIT),
+    POS_HOLD_MODE        = BIT(POSHOLD_MODE_BIT),
 } flightModeFlags_e;
 
 extern uint16_t flightModeFlags;
@@ -110,10 +114,11 @@ extern uint16_t flightModeFlags;
    [BOXANGLE]       = ANGLE_MODE_BIT,                    \
    [BOXHORIZON]     = HORIZON_MODE_BIT,                  \
    [BOXTRAINER]     = TRAINER_MODE_BIT,                  \
-   [BOXALTHOLD]     = ALTHOLD_MODE_BIT,                  \
-   [BOXRESCUE]      = RESCUE_MODE_BIT,                   \
-   [BOXGPSRESCUE]   = GPS_RESCUE_MODE_BIT,               \
-   [BOXFAILSAFE]    = FAILSAFE_MODE_BIT,                 \
+    [BOXALTHOLD]     = ALTHOLD_MODE_BIT,                  \
+    [BOXRESCUE]      = RESCUE_MODE_BIT,                   \
+    [BOXGPSRESCUE]   = GPS_RESCUE_MODE_BIT,               \
+    [BOXFAILSAFE]    = FAILSAFE_MODE_BIT,                 \
+    [BOXPOSHOLD]     = POSHOLD_MODE_BIT,                  \
 }                                                        \
 /**/
 

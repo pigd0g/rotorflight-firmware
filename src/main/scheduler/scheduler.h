@@ -120,6 +120,12 @@ typedef enum {
 #ifdef USE_BARO
     TASK_BARO,
 #endif
+#ifdef USE_ALTITUDE_HOLD
+    TASK_ALTITUDE,
+#endif
+#ifdef USE_POSITION_HOLD
+    TASK_POSHOLD,
+#endif
 #ifdef USE_RANGEFINDER
     TASK_RANGEFINDER,
 #endif

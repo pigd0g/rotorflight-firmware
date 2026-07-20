@@ -97,6 +97,7 @@
 
 #include "flight/failsafe.h"
 #include "flight/position.h"
+#include "flight/pos_hold.h"
 #include "flight/imu.h"
 #include "flight/mixer.h"
 #include "flight/pid.h"
@@ -754,6 +755,10 @@ void init(void)
     rxInit();
 
     positionInit();
+
+#ifdef USE_POSITION_HOLD
+    posHoldInit();
+#endif
 
 #ifdef USE_GPS
     if (featureIsEnabled(FEATURE_GPS)) {

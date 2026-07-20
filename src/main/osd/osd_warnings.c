@@ -49,6 +49,7 @@
 #include "flight/imu.h"
 #include "flight/mixer.h"
 #include "flight/pid.h"
+#include "flight/pos_hold.h"
 
 #include "io/beeper.h"
 
@@ -192,6 +193,24 @@ void renderOsdWarning(char *warningText, bool *blinking, uint8_t *displayAttr)
     }
 
 #endif // USE_GPS_RESCUE
+
+#ifdef USE_POSITION_HOLD
+    if (FLIGHT_MODE(POS_HOLD_MODE) && posHoldFailure()) {
+        tfp_sprintf(warningText, "POSHOLD FAIL");
+        *displayAttr = DISPLAYPORT_ATTR_CRITICAL;
+        *blinking = true;
+        return;
+    }
+#endif
+
+#ifdef USE_ALTITUDE_HOLD
+    if (FLIGHT_MODE(ALTHOLD_MODE) && altHoldFailure()) {
+        tfp_sprintf(warningText, "ALTHOLD FAIL");
+        *displayAttr = DISPLAYPORT_ATTR_CRITICAL;
+        *blinking = true;
+        return;
+    }
+#endif
 
 #ifdef USE_ADC_INTERNAL
     const int16_t coreTemperature = getCoreTemperatureCelsius();

@@ -35,6 +35,10 @@
 #include "flight/governor.h"
 #include "flight/airborne.h"
 
+#ifdef USE_ALTITUDE_HOLD
+#include "flight/autopilot.h"
+#endif
+
 #include "fc/runtime_config.h"
 #include "fc/rc.h"
 
@@ -285,6 +289,13 @@ void setpointUpdate(void)
         SP[axis] = getRcDeflection(axis);
         DEBUG_AXIS(SETPOINT, axis, 0, SP[axis] * 1000);
     }
+
+    // Altitude-hold overrides collective pitch setpoint; governor still drives throttle.
+#ifdef USE_ALTITUDE_HOLD
+    if (FLIGHT_MODE(ALTHOLD_MODE)) {
+        SP[FD_COLL] = getAutopilotCollective();
+    }
+#endif
 
     airborneUpdate(SP);
 
