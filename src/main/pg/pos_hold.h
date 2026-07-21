@@ -35,6 +35,7 @@ typedef struct posHoldConfig_s {
     uint8_t  headingRequired;       // require mag or GPS heading for position hold
     uint16_t opticalflowQualityMin;
     uint16_t opticalflowMaxRange;
+    uint8_t  gpsValidityTimeout;    // consecutive missed GPS cycles before clearing isValidXY (×0.1s; 5=0.5s)
 } posHoldConfig_t;
 
 PG_DECLARE(posHoldConfig_t, posHoldConfig);

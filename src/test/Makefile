@@ -185,6 +185,21 @@ position_estimator_unittest_INCLUDE_DIRS := \
 		$(USER_DIR)
 
 
+autopilot_unittest_SRC := \
+		$(USER_DIR)/flight/autopilot.c \
+		$(USER_DIR)/flight/position_estimator.c \
+		$(USER_DIR)/common/filter.c \
+		$(USER_DIR)/common/maths.c
+
+autopilot_unittest_DEFINES := \
+		USE_POSITION_HOLD= \
+		USE_ALTITUDE_HOLD= \
+		USE_GPS=
+
+autopilot_unittest_INCLUDE_DIRS := \
+		$(USER_DIR)
+
+
 io_serial_unittest_SRC := \
 		$(USER_DIR)/io/serial.c \
 		$(USER_DIR)/pg/serial.c \

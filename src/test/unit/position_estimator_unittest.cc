@@ -84,6 +84,7 @@ PG_RESET_TEMPLATE(posHoldConfig_t, posHoldConfig,
     .deadband = 5,
     .positionSource = POSHOLD_SOURCE_AUTO,
     .minSats = 5,
+    .gpsValidityTimeout = 5,
 );
 PG_REGISTER_WITH_RESET_TEMPLATE(posHoldConfig_t, posHoldConfig, PG_POSHOLD_CONFIG, 0);
 
@@ -148,6 +149,7 @@ protected:
 
         posHoldConfig_System.positionSource = POSHOLD_SOURCE_AUTO;
         posHoldConfig_System.minSats = 5;
+        posHoldConfig_System.gpsValidityTimeout = 5;
         autopilotConfig_System.positionA = 30;
         positionConfig_System.alt_source = ALT_SOURCE_DEFAULT;
 

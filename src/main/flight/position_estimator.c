@@ -99,6 +99,13 @@ typedef struct posEstimatorState_s {
 
     bool sticksActive;
     timeUs_t lastUpdateUs;
+
+    // Latched-validity miss counters: increment each cycle the sensor does
+    // not feed, reset to 0 when it does. isValidXY/Z only cleared after
+    // gpsValidityTimeout consecutive misses, preventing per-cycle toggle
+    // when satellite count dips briefly below the threshold.
+    uint8_t gpsMissCount;
+    uint8_t baroMissCount;
 } posEstimatorState_t;
 
 static FAST_DATA_ZERO_INIT posEstimatorState_t posEstimator;
@@ -274,6 +281,7 @@ static void feedGPSMeasurements(void)
     kalmanUpdate(&posEstimator.kfEast,  offsetEast,  (float)gpsSol.velE, rPos, rVel);
     kalmanUpdate(&posEstimator.kfNorth, offsetNorth, (float)gpsSol.velN, rPos, rVel);
 
+    posEstimator.gpsMissCount = 0;
     posEstimator.estimate.isValidXY = true;
 #else
     UNUSED(posHoldConfig);
@@ -292,6 +300,7 @@ static void feedAltitudeMeasurements(void)
         // Simple baro altitude fusion relative to origin.
         const float altCm = baroAltCm - posEstimator.originAltCm;
         kalmanUpdate(&posEstimator.kfUp, altCm, 0.0f, 100.0f, 1000.0f);
+        posEstimator.baroMissCount = 0;
         posEstimator.estimate.isValidZ = true;
     }
 #endif
@@ -314,6 +323,7 @@ void positionEstimatorEnableXY(bool enable)
     if (enable) {
         posEstimator.estimate.isValidXY = false;
         posEstimator.originValid = false;
+        posEstimator.gpsMissCount = 0;
         kalmanInit(&posEstimator.kfEast,  KALMAN_Q_POSITION, KALMAN_Q_VELOCITY, GPS_R_POSITION_BASE, GPS_R_VELOCITY_BASE);
         kalmanInit(&posEstimator.kfNorth, KALMAN_Q_POSITION, KALMAN_Q_VELOCITY, GPS_R_POSITION_BASE, GPS_R_VELOCITY_BASE);
     }
@@ -327,10 +337,14 @@ void positionEstimatorUpdate(timeUs_t currentTimeUs)
     const float dt = (posEstimator.lastUpdateUs == 0) ? 0.01f : constrainf((now - posEstimator.lastUpdateUs) * 1e-6f, 0.0001f, 0.05f);
     posEstimator.lastUpdateUs = now;
 
-    posEstimator.estimate.isValidXY = false;
-    posEstimator.estimate.isValidZ = false;
-    posEstimator.estimate.trustXY = 0.0f;
-    posEstimator.estimate.trustZ = 0.0f;
+    // Increment miss counters; reset to 0 by feedGPSMeasurements/
+    // feedAltitudeMeasurements when the sensor feeds. Validity is only
+    // cleared after gpsValidityTimeout consecutive misses (latch), preventing
+    // PH/ALTHOLD from toggling off when a satellite count dips for one cycle.
+    if (posEstimator.xyEnabled) {
+        if (posEstimator.gpsMissCount < UINT8_MAX) posEstimator.gpsMissCount++;
+    }
+    if (posEstimator.baroMissCount < UINT8_MAX) posEstimator.baroMissCount++;
 
     float accelEast = 0.0f, accelNorth = 0.0f, accelUp = 0.0f;
 
@@ -349,6 +363,19 @@ void positionEstimatorUpdate(timeUs_t currentTimeUs)
     }
 
     feedAltitudeMeasurements();
+
+    // Latch: only clear validity after N consecutive missed cycles.
+    const uint8_t validityLimit = posHoldConfig() ? posHoldConfig()->gpsValidityTimeout : 5;
+    if (posEstimator.xyEnabled) {
+        if (posEstimator.gpsMissCount >= validityLimit) {
+            posEstimator.estimate.isValidXY = false;
+        }
+    } else {
+        posEstimator.estimate.isValidXY = false;
+    }
+    if (posEstimator.baroMissCount >= validityLimit) {
+        posEstimator.estimate.isValidZ = false;
+    }
 
     // Export estimate
     setEstimateAxis(&posEstimator.estimate, ENU_EAST,  &posEstimator.kfEast,  posEstimator.estimate.isValidXY);

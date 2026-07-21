@@ -78,6 +78,7 @@
 #include "flight/servos.h"
 #include "flight/governor.h"
 #include "flight/rescue.h"
+#include "flight/autopilot.h"
 
 #include "io/beeper.h"
 #include "io/gps.h"
@@ -481,6 +482,13 @@ void disarm(flightLogDisarmReason_e reason)
         if (!getArmingDisableFlags()) {
             beeper(BEEPER_DISARMING);      // emit disarm tone
         }
+
+#if defined(USE_POSITION_HOLD) || defined(USE_ALTITUDE_HOLD)
+        // Reset autopilot collective output and altitude I-term so the next
+        // arm starts from a clean state (no pre-wound I-term or stale
+        // collective offset from the previous flight).
+        autopilotDisarmCleanup();
+#endif
     }
 }
 

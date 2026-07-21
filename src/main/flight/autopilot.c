@@ -73,7 +73,6 @@
 #define ALTITUDE_I_SCALE      0.0002f   // collective pitch offset per cm*s
 #define ALTITUDE_D_SCALE      0.0005f   // collective pitch offset per cm/s
 #define ALTITUDE_F_SCALE      0.0005f   // collective pitch offset per cm/s target velocity
-#define YAW_P_SCALE           0.1f      // deg/s per deg bearing error (not used for PH)
 
 // Limits and defaults.
 #define ERROR_DISTANCE_LIMIT  2000.0f   // 20 m
@@ -84,9 +83,6 @@
 #define START_BRAKE_RAMP      0.1f
 #define STOP_SPEED_CM_S       20.0f
 #define MAX_ANGLE_DEFAULT     50.0f     // deg
-#define VELOCITY_I_LIMIT_DEG  15.0f
-#define VELOCITY_I_RELAX_CMS  250.0f
-#define MIN_COS_TILT          0.5f
 
 // Low-pass filter cutoffs.
 #define ACCEL_LPF_CUTOFF      20.0f
@@ -132,7 +128,6 @@ static float targetAltitudeCm = 0.0f;
 static float capturedHoverCollective = 0.0f;
 
 static float positionKp, positionKi, positionKd, positionKa;
-static float velocityKp, velocityKi, velocityKd, velocityDragKff;
 static float altitudeKp, altitudeKi, altitudeKd, altitudeKf;
 static float maxAngleDeg;
 
@@ -184,7 +179,8 @@ static void resetVelocityIntegral(void)
 static float calculateSanityCheckDistance(void)
 {
     const positionEstimate3d_t *est = positionEstimatorGetEstimate();
-    const float speedCmS = vector2Norm((const vector2_t *)&est->velocity.v);
+    const vector2_t vel2D = vector3ToVector2XY(&est->velocity);
+    const float speedCmS = vector2Norm(&vel2D);
     return fmaxf(SANITY_CHECK_DISTANCE, speedCmS * 2.0f);
 }
 
@@ -216,8 +212,8 @@ static bool positionControl(void)
         return false;
     }
 
-    const vector2_t currentPosition = *(const vector2_t *)&est->position.v;
-    const vector2_t velocity        = *(const vector2_t *)&est->velocity.v;
+    const vector2_t currentPosition = vector3ToVector2XY(&est->position);
+    const vector2_t velocity        = vector3ToVector2XY(&est->velocity);
 
     // Station keeping: capture target on first entry and when sticks first move.
     if (!ap.isPositionHeld) {
@@ -360,11 +356,13 @@ static void altitudeControl(void)
     const float altitudeError = targetAltitudeCm - currentAlt;
     const float itermRelax = (fabsf(altitudeError) < 200.0f) ? 1.0f : 0.1f;
 
+    const float dt = getTaskIntervalS();
+
     const float altitudeP = altitudeError * altitudeKp;
-    altitudeI += altitudeError * altitudeKi * itermRelax * HZ_TO_INTERVAL(POSHOLD_TASK_RATE_HZ);
+    altitudeI += altitudeError * altitudeKi * itermRelax * dt;
     altitudeI = constrainf(altitudeI, -ALTITUDE_I_LIMIT, ALTITUDE_I_LIMIT);
 
-    const float vario = (currentAlt - previousAlt) * POSHOLD_TASK_RATE_HZ;
+    const float vario = (dt > 0.0f) ? (currentAlt - previousAlt) / dt : 0.0f;
     previousAlt = currentAlt;
     const float altitudeD = -vario * altitudeKd;
     const float altitudeF = 0.0f; // no target vertical velocity for basic alt hold
@@ -374,8 +372,8 @@ static void altitudeControl(void)
 
     // Add hover trim and clamp to configured min/max collective relative to hover.
     float collectiveCmd = capturedHoverCollective + collectiveOffset;
-    const float minCollective = cfg->collectiveMin * 0.001f;
-    const float maxCollective = cfg->collectiveMax * 0.001f;
+    const float minCollective = capturedHoverCollective + cfg->collectiveMin * 0.001f;
+    const float maxCollective = capturedHoverCollective + cfg->collectiveMax * 0.001f;
     collectiveCmd = constrainf(collectiveCmd, minCollective, maxCollective);
 
     collectiveOut = collectiveCmd;
@@ -395,11 +393,6 @@ static void autopilotLoadGains(void)
     positionKi = cfg->positionI  * POSITION_I_SCALE;
     positionKd = cfg->positionD  * POSITION_D_SCALE;
     positionKa = cfg->positionA  * POSITION_A_SCALE;
-
-    velocityKp      = cfg->velocityP * 0.0004f;
-    velocityKi      = cfg->velocityI * 0.001f;
-    velocityKd      = cfg->velocityD * 0.0004f;
-    velocityDragKff = cfg->velocityDragCoeff * 0.0001f;
 
     altitudeKp = cfg->altitudeP * ALTITUDE_P_SCALE;
     altitudeKi = cfg->altitudeI * ALTITUDE_I_SCALE;
@@ -442,7 +435,7 @@ void autopilotResetPositionControl(void)
     initPositionHold();
     resetDistanceError();
     resetVelocityIntegral();
-    previousVelocity = *(const vector2_t *)&positionEstimatorGetEstimate()->velocity.v;
+    previousVelocity = vector3ToVector2XY(&positionEstimatorGetEstimate()->velocity);
     ap.sanityCheckDistance = calculateSanityCheckDistance();
 }
 
@@ -462,11 +455,6 @@ float getAutopilotAngle(unsigned axis)
         return autopilotAngle[axis];
     }
     return 0.0f;
-}
-
-float getAutopilotThrottle(void)
-{
-    return 0.0f; // governor handles throttle; altitude hold uses collective only
 }
 
 float getAutopilotCollective(void)

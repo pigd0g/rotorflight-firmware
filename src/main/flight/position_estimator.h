@@ -119,6 +119,16 @@ static inline void vector3Sub(vector3_t *out, const vector3_t *a, const vector3_
     out->v[2] = a->v[2] - b->v[2];
 }
 
+// Extract the horizontal (East-North) components of a 3-D vector.
+// Replaces the strict-aliasing-UB pattern *(const vector2_t *)&est->position.v.
+static inline vector2_t vector3ToVector2XY(const vector3_t *v)
+{
+    vector2_t out;
+    out.v[EF_EAST]  = v->v[ENU_EAST];
+    out.v[EF_NORTH] = v->v[ENU_NORTH];
+    return out;
+}
+
 // Unified position estimate from Kalman-filter sensor fusion.
 // All values in local ENU (East-North-Up) centimeters, zeroed at arm point.
 typedef struct positionEstimate3d_s {

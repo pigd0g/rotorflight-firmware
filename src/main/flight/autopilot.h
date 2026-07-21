@@ -31,7 +31,6 @@ bool autopilotPositionControl(void);
 void autopilotAltitudeControl(void);
 
 float getAutopilotAngle(unsigned axis);
-float getAutopilotThrottle(void);
 float getAutopilotCollective(void);
 float getAutopilotHoverCollective(void);
 

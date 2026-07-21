@@ -32,6 +32,7 @@ PG_RESET_TEMPLATE(posHoldConfig_t, posHoldConfig,
     .headingRequired = 1,
     .opticalflowQualityMin = 30,
     .opticalflowMaxRange = 400,
+    .gpsValidityTimeout = 5,
 );
 
 #endif
