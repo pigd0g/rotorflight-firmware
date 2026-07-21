@@ -6,8 +6,7 @@ offset that holds the rotorcraft at that altitude. The pilot can climb or
 descend with the collective stick; on stick return the craft holds the new
 altitude.
 
-This page documents the CLI parameters for initial configuration. For the
-internal architecture, see `betaflight-gps-hold.md` at the repository root.
+This page documents the CLI parameters for initial configuration.
 
 ## Relationship to other modes
 
@@ -16,8 +15,6 @@ internal architecture, see `betaflight-gps-hold.md` at the repository root.
   will hold position and altitude independently.
 - **`GPS RESCUE`** runs its own altitude logic; alt-hold is suppressed while
   rescue is active.
-- **`AUTOPILOT`** activates alt-hold underneath it so the mission controls the
-  vertical axis via a navigator-supplied target altitude.
 - Throttle is **not** driven by the autopilot. The governor (or the pilot) sets
   the engine/motor RPM; the altitude controller trims **collective** to hold
   altitude. There are no `ap_*_throttle` parameters.
@@ -59,15 +56,15 @@ Parameters are read/written with `get` and `set` in the CLI, for example
 | `ap_altitude_p` | uint8 | 0..255 | `30` | P gain on altitude error (cm). Higher pulls harder toward the target altitude. |
 | `ap_altitude_i` | uint8 | 0..255 | `30` | I gain on altitude error. Provides the steady-state trim for rotor RPM variation, weight change, and small sensor biases. |
 | `ap_altitude_d` | uint8 | 0..255 | `30` | D gain on vertical speed (vario). Provides damping; reduce if the craft bobs at the hold altitude. |
-| `ap_altitude_f` | uint8 | 0..255 | — | Feedforward on target vertical speed. Currently unused by the basic alt-hold loop; reserved for mission profiles that supply a target climb/sink rate. |
+| `ap_altitude_f` | uint8 | 0..255 | `30` | Feedforward on target vertical speed. Currently hardcoded to 0 in the basic alt-hold loop; the gain is loaded but the feedforward term is not used. Reserved for future mission profiles that supply a target climb/sink rate. |
 
 ### Hover collective
 
 | Parameter | Type | Range | Default | Description |
 | --- | --- | --- | --- | --- |
 | `ap_hover_collective` | uint16 | 0..1000 | `500` | Default hover collective when the collective stick is not centered at alt-hold entry. The range 0..1000 maps to -1..+1 deflection; 500 is the geometric center. |
-| `ap_collective_min` | int16 | -1000..1000 | `-300` | Minimum collective offset below hover that the controller is allowed to command (deflection × 1000). Prevents the controller from driving the collective all the way to zero throttle. |
-| `ap_collective_max` | int16 | -1000..1000 | `300` | Maximum collective offset above hover that the controller is allowed to command. Caps the climb authority. |
+| `ap_collective_min` | int16 | -500..500 | `-300` | Minimum collective offset below the captured hover collective that the controller is allowed to command (deflection × 1000). Prevents the controller from driving the collective below the hover point by more than this amount. |
+| `ap_collective_max` | int16 | -500..500 | `300` | Maximum collective offset above the captured hover collective that the controller is allowed to command. Caps the climb authority relative to hover. |
 | `ap_alt_hold_deadband` | uint16 | 0..1000 | `50` | Collective stick deadband (deflection × 1000) used at alt-hold entry to decide whether to capture the live stick as the hover collective. Larger values make the controller more willing to use the live value; smaller values force it back to `ap_hover_collective`. |
 
 ## Initial configuration
@@ -80,7 +77,7 @@ set altitude_source = DEFAULT       # baro+GPS blend
 set ap_altitude_p = 30
 set ap_altitude_i = 30
 set ap_altitude_d = 30
-set ap_altitude_f = 0
+set ap_altitude_f = 30               # reserved; loaded but not used by basic alt-hold
 set ap_hover_collective = 500
 set ap_collective_min = -300
 set ap_collective_max = 300
@@ -141,5 +138,3 @@ the collective travel.
 - [docs/Governor.md](Governor.md) — the governor holds RPM, which is what
   alt-hold trims against.
 - [docs/Modes.md](Modes.md) — flight mode aux-channel assignment.
-- `betaflight-gps-hold.md` (repository root) — full developer reference for
-  the autopilot stack.
