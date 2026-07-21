@@ -75,13 +75,20 @@
 // Minimum satellites for a trustworthy GPS fix.
 #define GPS_MIN_SATS_DEFAULT 5
 
-typedef struct positionKalman_s {
-    float x[2];     // [position, velocity]
-    float p[2][2];  // error covariance
-    float q[2];     // process noise
-    float rPos;     // measurement noise for position
-    float rVel;     // measurement noise for velocity
-} positionKalman_t;
+// Per-axis Kalman filter struct is defined in position_estimator.h.
+// The primitives below are STATIC_UNIT_TESTED so unit tests can exercise
+// them directly.
+
+STATIC_UNIT_TESTED void kalmanInit(positionKalman_t *kf, float qPos, float qVel, float rPos, float rVel)
+{
+    memset(kf, 0, sizeof(*kf));
+    kf->q[0] = qPos;
+    kf->q[1] = qVel;
+    kf->rPos = rPos;
+    kf->rVel = rVel;
+    kf->p[0][0] = 10000.0f;
+    kf->p[1][1] = 100.0f;
+}
 
 typedef struct posEstimatorState_s {
     positionEstimate3d_t estimate;
@@ -109,17 +116,6 @@ typedef struct posEstimatorState_s {
 } posEstimatorState_t;
 
 static FAST_DATA_ZERO_INIT posEstimatorState_t posEstimator;
-
-static inline void kalmanInit(positionKalman_t *kf, float qPos, float qVel, float rPos, float rVel)
-{
-    memset(kf, 0, sizeof(*kf));
-    kf->q[0] = qPos;
-    kf->q[1] = qVel;
-    kf->rPos = rPos;
-    kf->rVel = rVel;
-    kf->p[0][0] = 10000.0f;
-    kf->p[1][1] = 100.0f;
-}
 
 // Predict step: integrate acceleration over dt.
 // x = F*x + B*u, P = F*P*F' + Q
@@ -216,8 +212,15 @@ static inline void setEstimateAxis(positionEstimate3d_t *est, enuAxis_e axis,
         trust = 0.0f;
     }
 
-    if (axis == ENU_EAST || axis == ENU_NORTH) {
-        est->trustXY = 0.5f * (est->trustXY + trust);
+    if (axis == ENU_EAST) {
+        est->trustXY = trust;
+    } else if (axis == ENU_NORTH) {
+        // XY trust is limited by the worse of the two axes — both are needed
+        // for a valid horizontal position, so a single bad axis degrades the
+        // whole XY estimate. This replaces the previous leaky-integrator
+        // mixing (0.5*(prev+trust)) which carried stale trust across cycles
+        // and over-weighted the North axis.
+        est->trustXY = fminf(est->trustXY, trust);
     } else {
         est->trustZ = trust;
     }
@@ -331,9 +334,7 @@ void positionEstimatorEnableXY(bool enable)
 
 void positionEstimatorUpdate(timeUs_t currentTimeUs)
 {
-    (void)currentTimeUs;
-
-    const timeUs_t now = micros();
+    const timeUs_t now = currentTimeUs;
     const float dt = (posEstimator.lastUpdateUs == 0) ? 0.01f : constrainf((now - posEstimator.lastUpdateUs) * 1e-6f, 0.0001f, 0.05f);
     posEstimator.lastUpdateUs = now;
 
@@ -403,9 +404,15 @@ bool positionEstimatorIsValidXY(void)
 bool positionEstimatorIsHeadingRequired(void)
 {
 #ifdef USE_GPS
+    // OPTICALFLOW_ONLY: heading is not required (flow->ENU->body yaw error
+    // cancels). However, OPTICALFLOW_ONLY is currently unimplemented — no
+    // optical-flow sensor feeding exists. Selecting it means no XY correction
+    // at all and PH will not engage (safe fail-closed).
     if (posHoldConfig()->positionSource == POSHOLD_SOURCE_OPTICALFLOW_ONLY) {
         return false;
     }
+    // AUTO / GPS_ONLY: GPS provides absolute ENU measurements, so a valid
+    // heading is required to rotate the body->EF correction correctly.
     return sensors(SENSOR_GPS) && STATE(GPS_FIX);
 #else
     return false;

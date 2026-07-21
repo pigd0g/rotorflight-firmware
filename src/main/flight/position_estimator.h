@@ -20,6 +20,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include "build/build_config.h"
+
 #include "common/axis.h"
 #include "common/maths.h"
 #include "common/time.h"
@@ -128,6 +130,27 @@ static inline vector2_t vector3ToVector2XY(const vector3_t *v)
     out.v[EF_NORTH] = v->v[ENU_NORTH];
     return out;
 }
+
+// Per-axis 2-state Kalman filter (position + velocity).
+// Exposed in the header so unit tests can call kalmanInit / kalmanPredict /
+// kalmanUpdate directly. Production code should use positionEstimatorUpdate()
+// and positionEstimatorGetEstimate() instead.
+typedef struct positionKalman_s {
+    float x[2];     // [position, velocity]
+    float p[2][2];  // error covariance
+    float q[2];     // process noise
+    float rPos;     // measurement noise for position
+    float rVel;     // measurement noise for velocity
+} positionKalman_t;
+
+// Kalman filter primitives. In production builds these are static (private
+// to position_estimator.c). In UNIT_TEST builds STATIC_UNIT_TESTED makes them
+// non-static so tests can call them directly.
+#ifdef UNIT_TEST
+void kalmanInit(positionKalman_t *kf, float qPos, float qVel, float rPos, float rVel);
+void kalmanPredict(positionKalman_t *kf, float accel, float dt);
+void kalmanUpdate(positionKalman_t *kf, float posMeasured, float velMeasured, float rPos, float rVel);
+#endif
 
 // Unified position estimate from Kalman-filter sensor fusion.
 // All values in local ENU (East-North-Up) centimeters, zeroed at arm point.

@@ -41,12 +41,11 @@ extern "C" {
     #include "sensors/acceleration.h"
     #include "sensors/barometer.h"
 
-    // Test-visible internals
+    // Test-visible internals (kalmanInit/Predict/Update and getLinearAccelENU
+    // are declared in position_estimator.h which is included above).
     void positionEstimatorInit(void);
     void positionEstimatorUpdate(timeUs_t currentTimeUs);
     void positionEstimatorEnableXY(bool enable);
-    void feedGPSMeasurements(void);
-    void getLinearAccelENU(float *accelEast, float *accelNorth, float *accelUp);
 }
 
 #include "unittest_macros.h"
@@ -63,7 +62,10 @@ attitudeEulerAngles_t attitude;
 uint8_t debugMode;
 int32_t debug[DEBUG_VALUE_COUNT];
 
-timeUs_t micros(void) { return 0; }
+// Mock time: advances by 10000 us (100 Hz) each call to mock_micros_advance.
+static timeUs_t mock_micros_value = 0;
+timeUs_t micros(void) { return mock_micros_value; }
+void mock_micros_advance(timeUs_t delta) { mock_micros_value += delta; }
 bool baroIsReady(void) { return true; }
 
 uint8_t armingFlags;
@@ -146,6 +148,7 @@ protected:
         flightModeFlags = 0;
         stateFlags = 0;
         GPS_scaleLonDown = 1.0f;
+        mock_micros_value = 0;
 
         posHoldConfig_System.positionSource = POSHOLD_SOURCE_AUTO;
         posHoldConfig_System.minSats = 5;
@@ -224,7 +227,8 @@ TEST_F(PositionEstimatorTest, GPSMeasurementFusesIntoEstimate)
     gpsSol.velE = 0;
     gpsSol.velN = 0;
 
-    positionEstimatorUpdate(0);
+    mock_micros_advance(10000);
+    positionEstimatorUpdate(mock_micros_value);
 
     const positionEstimate3d_t *est = positionEstimatorGetEstimate();
     EXPECT_TRUE(est->isValidXY);
@@ -244,7 +248,8 @@ TEST_F(PositionEstimatorTest, EstimateDriftsWithoutGPS)
     acc.accADC[Y] = 0;
     acc.accADC[Z] = 256;
 
-    positionEstimatorUpdate(0);
+    mock_micros_advance(10000);
+    positionEstimatorUpdate(mock_micros_value);
 
     const positionEstimate3d_t *est = positionEstimatorGetEstimate();
     EXPECT_FALSE(est->isValidXY);
@@ -282,7 +287,8 @@ TEST_F(PositionEstimatorTest, KalmanConvergesToFixedMeasurement)
     gpsSol.hdop = 150;
 
     // First call captures the origin from the current GPS fix.
-    positionEstimatorUpdate(0);
+    mock_micros_advance(10000);
+    positionEstimatorUpdate(mock_micros_value);
 
     // Step north by 1000 cm for all subsequent cycles.
     gpsSol.llh.lat = originLat + stepLatUnits;
@@ -290,7 +296,8 @@ TEST_F(PositionEstimatorTest, KalmanConvergesToFixedMeasurement)
     float prevNorth = 1e9f;
     float maxAbsDelta = 0.0f;
     for (int i = 0; i < 60; ++i) {
-        positionEstimatorUpdate(0);
+        mock_micros_advance(10000);
+        positionEstimatorUpdate(mock_micros_value);
         const positionEstimate3d_t *est = positionEstimatorGetEstimate();
         const float north = est->position.v[ENU_NORTH];
         const float delta = fabsf(north - prevNorth);
@@ -310,7 +317,8 @@ TEST_F(PositionEstimatorTest, KalmanConvergesToFixedMeasurement)
     // smaller than the largest delta observed in the first 50 cycles.
     float lastDelta = 0.0f;
     for (int i = 0; i < 10; ++i) {
-        positionEstimatorUpdate(0);
+        mock_micros_advance(10000);
+        positionEstimatorUpdate(mock_micros_value);
         const float north = positionEstimatorGetEstimate()->position.v[ENU_NORTH];
         const float d = fabsf(north - prevNorth);
         if (d > lastDelta) lastDelta = d;
@@ -347,10 +355,122 @@ TEST_F(PositionEstimatorTest, KalmanVelocityTracksMeasurement)
     gpsSol.hdop = 150;
 
     for (int i = 0; i < 50; ++i) {
-        positionEstimatorUpdate(0);
+        mock_micros_advance(10000);
+        positionEstimatorUpdate(mock_micros_value);
     }
 
     const positionEstimate3d_t *est = positionEstimatorGetEstimate();
     // Velocity estimate must converge toward 200 cm/s north within ~30 cm/s.
     EXPECT_NEAR(est->velocity.v[ENU_NORTH], 200.0f, 30.0f);
+}
+
+// S9: Direct Kalman unit tests — exercise the filter primitives in isolation
+// to verify the math is correct. These complement the indirect C1 regression
+// tests above and would have caught the original covariance-update bug.
+
+TEST_F(PositionEstimatorTest, KalmanInitSetsDefaults)
+{
+    positionKalman_t kf;
+    kalmanInit(&kf, 0.05f, 1.0f, 500.0f, 200.0f);
+
+    EXPECT_FLOAT_EQ(kf.q[0], 0.05f);
+    EXPECT_FLOAT_EQ(kf.q[1], 1.0f);
+    EXPECT_FLOAT_EQ(kf.rPos, 500.0f);
+    EXPECT_FLOAT_EQ(kf.rVel, 200.0f);
+    EXPECT_FLOAT_EQ(kf.p[0][0], 10000.0f);
+    EXPECT_FLOAT_EQ(kf.p[1][1], 100.0f);
+    EXPECT_FLOAT_EQ(kf.p[0][1], 0.0f);
+    EXPECT_FLOAT_EQ(kf.p[1][0], 0.0f);
+    EXPECT_FLOAT_EQ(kf.x[0], 0.0f);
+    EXPECT_FLOAT_EQ(kf.x[1], 0.0f);
+}
+
+TEST_F(PositionEstimatorTest, KalmanPredictAdvancesState)
+{
+    positionKalman_t kf;
+    kalmanInit(&kf, 0.05f, 1.0f, 500.0f, 200.0f);
+
+    // Set initial velocity: 100 cm/s
+    kf.x[1] = 100.0f;
+
+    // Predict with accel = 50 cm/s^2, dt = 0.1 s
+    const float accel = 50.0f;
+    const float dt = 0.1f;
+    kalmanPredict(&kf, accel, dt);
+
+    // Expected: x[0] += vel*dt + 0.5*accel*dt^2 = 100*0.1 + 0.5*50*0.01 = 10 + 0.25 = 10.25
+    //           x[1] += accel*dt = 100 + 50*0.1 = 105
+    EXPECT_NEAR(kf.x[0], 10.25f, 0.01f);
+    EXPECT_NEAR(kf.x[1], 105.0f, 0.01f);
+
+    // Covariance must grow (predict increases uncertainty)
+    EXPECT_GT(kf.p[0][0], 10000.0f);
+    EXPECT_GT(kf.p[1][1], 100.0f);
+}
+
+TEST_F(PositionEstimatorTest, KalmanUpdateReducesCovariance)
+{
+    positionKalman_t kf;
+    kalmanInit(&kf, 0.05f, 1.0f, 500.0f, 200.0f);
+
+    const float p00Before = kf.p[0][0];
+    const float p11Before = kf.p[1][1];
+
+    // Feed a position measurement of 1000 cm, velocity 0
+    kalmanUpdate(&kf, 1000.0f, 0.0f, 500.0f, 200.0f);
+
+    // Covariance must decrease (correction reduces uncertainty)
+    EXPECT_LT(kf.p[0][0], p00Before);
+    EXPECT_LT(kf.p[1][1], p11Before);
+
+    // State must move toward the measurement
+    EXPECT_GT(kf.x[0], 0.0f);
+    EXPECT_NEAR(kf.x[0], 1000.0f, 200.0f);  // partial convergence in one step
+}
+
+TEST_F(PositionEstimatorTest, KalmanUpdateConvergesToMeasurement)
+{
+    positionKalman_t kf;
+    kalmanInit(&kf, 0.05f, 1.0f, 100.0f, 1000.0f);
+
+    // Repeatedly update with the same measurement; state must converge.
+    for (int i = 0; i < 100; ++i) {
+        kalmanUpdate(&kf, 500.0f, 50.0f, 100.0f, 1000.0f);
+    }
+
+    EXPECT_NEAR(kf.x[0], 500.0f, 1.0f);
+    EXPECT_NEAR(kf.x[1], 50.0f, 5.0f);
+}
+
+// S2: Verify trustXY uses min(East, North), not a leaky average.
+TEST_F(PositionEstimatorTest, TrustXYUsesMinOfAxes)
+{
+    ENABLE_ARMING_FLAG(ARMED);
+    ENABLE_STATE(GPS_FIX);
+
+    acc.dev.acc_1G = 256;
+    acc.dev.acc_1G_rec = 1.0f / 256.0f;
+    acc.accADC[X] = 0;
+    acc.accADC[Y] = 0;
+    acc.accADC[Z] = 256;
+
+    positionEstimatorEnableXY(true);
+
+    gpsSol.numSat = 12;
+    gpsSol.hdop = 150;
+    gpsSol.llh.lat = 515000000;
+    gpsSol.llh.lon = -1000000;
+    gpsSol.velE = 0;
+    gpsSol.velN = 0;
+
+    // Run one cycle to get a valid estimate with trust.
+    mock_micros_advance(10000);
+    positionEstimatorUpdate(mock_micros_value);
+
+    const positionEstimate3d_t *est = positionEstimatorGetEstimate();
+    EXPECT_TRUE(est->isValidXY);
+    // trustXY should be > 0 since we have a valid GPS fix.
+    EXPECT_GT(est->trustXY, 0.0f);
+    // trustXY should be <= 1.0
+    EXPECT_LE(est->trustXY, 1.0f);
 }

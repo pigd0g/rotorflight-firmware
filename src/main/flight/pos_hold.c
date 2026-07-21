@@ -65,7 +65,6 @@ typedef struct posHoldState_s {
     bool isEnabled;
     bool isControlOk;
     bool areSensorsOk;
-    float deadband;
     // Latched: becomes true the first time GPS COG becomes usable (mag healthy
     // OR groundSpeed >= POSHOLD_GPS_COG_MIN_GROUNDSPEED with a fix and enough
     // sats). Stays true until both mag and GPS fix are lost entirely. Prevents
@@ -79,7 +78,6 @@ static posHoldState_t posHold;
 
 void INIT_CODE posHoldInit(void)
 {
-    posHold.deadband = posHoldConfig()->deadband * 0.01f;
     posHold.gpsHeadingEverValid = false;
     autopilotInit();
 }
@@ -92,9 +90,12 @@ static void posHoldCheckSticks(void)
         return;
     }
 
+    // Read deadband from config each cycle so CLI changes take effect
+    // without requiring a reboot.
+    const float deadband = posHoldConfig()->deadband * 0.01f;
     const bool sticksDeflected =
-        (fabsf(getRcDeflection(FD_ROLL)) > posHold.deadband) ||
-        (fabsf(getRcDeflection(FD_PITCH)) > posHold.deadband);
+        (fabsf(getRcDeflection(FD_ROLL)) > deadband) ||
+        (fabsf(getRcDeflection(FD_PITCH)) > deadband);
 
     positionEstimatorSetSticksActive(sticksDeflected);
     autopilotSetSticksActive(sticksDeflected);

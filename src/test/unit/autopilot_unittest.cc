@@ -271,7 +271,7 @@ protected:
     void RunEstimatorCycle()
     {
         mock_micros_advance(10000);
-        positionEstimatorUpdate(0);
+        positionEstimatorUpdate(mock_micros_value);
     }
 };
 

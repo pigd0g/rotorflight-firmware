@@ -25,7 +25,12 @@
 typedef enum {
     POSHOLD_SOURCE_AUTO = 0,
     POSHOLD_SOURCE_GPS_ONLY,
-    POSHOLD_SOURCE_OPTICALFLOW_ONLY,
+    POSHOLD_SOURCE_OPTICALFLOW_ONLY,  // RESERVED: no optical-flow feeding
+                                      // is implemented yet. Selecting this
+                                      // source disables GPS XY correction;
+                                      // isValidXY will never become true and
+                                      // PH will not engage. Kept as a
+                                      // placeholder for future implementation.
 } posHoldSource_e;
 
 typedef struct posHoldConfig_s {

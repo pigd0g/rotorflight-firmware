@@ -25,7 +25,6 @@ void positionUpdate(void);
 #ifdef USE_POSITION_HOLD
 void positionEstimatorInit(void);
 void positionEstimatorEnableXY(bool enable);
-void positionEstimatorUpdate(timeUs_t currentTimeUs);
 const positionEstimate3d_t *positionEstimatorGetEstimate(void);
 bool positionEstimatorIsValidXY(void);
 bool positionEstimatorIsHeadingRequired(void);

@@ -1772,8 +1772,8 @@ const clivalue_t valueTable[] = {
     { "ap_altitude_d",             VAR_UINT8  | MASTER_VALUE, .config.minmaxUnsigned = { 0, 255 }, PG_AUTOPILOT_CONFIG, offsetof(autopilotConfig_t, altitudeD) },
     { "ap_altitude_f",             VAR_UINT8  | MASTER_VALUE, .config.minmaxUnsigned = { 0, 255 }, PG_AUTOPILOT_CONFIG, offsetof(autopilotConfig_t, altitudeF) },
     { "ap_hover_collective",       VAR_UINT16 | MASTER_VALUE, .config.minmaxUnsigned = { 0, 1000 }, PG_AUTOPILOT_CONFIG, offsetof(autopilotConfig_t, hoverCollective) },
-    { "ap_collective_min",         VAR_INT16  | MASTER_VALUE, .config.minmax = { -1000, 1000 }, PG_AUTOPILOT_CONFIG, offsetof(autopilotConfig_t, collectiveMin) },
-    { "ap_collective_max",         VAR_INT16  | MASTER_VALUE, .config.minmax = { -1000, 1000 }, PG_AUTOPILOT_CONFIG, offsetof(autopilotConfig_t, collectiveMax) },
+    { "ap_collective_min",         VAR_INT16  | MASTER_VALUE, .config.minmax = { -500, 500 }, PG_AUTOPILOT_CONFIG, offsetof(autopilotConfig_t, collectiveMin) },
+    { "ap_collective_max",         VAR_INT16  | MASTER_VALUE, .config.minmax = { -500, 500 }, PG_AUTOPILOT_CONFIG, offsetof(autopilotConfig_t, collectiveMax) },
     { "ap_alt_hold_deadband",      VAR_UINT16 | MASTER_VALUE, .config.minmaxUnsigned = { 0, 1000 }, PG_AUTOPILOT_CONFIG, offsetof(autopilotConfig_t, altHoldDeadband) },
 
 // PG_MODE_ACTIVATION_CONFIG
